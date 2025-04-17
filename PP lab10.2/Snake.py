@@ -7,11 +7,35 @@ from datetime import datetime
 def create_connection():
     return psycopg2.connect(
         host="localhost",
-        database="lab10.2",  # ✅ Your custom DB
+        database="lab10.2",
         user="postgres",
         password="12345678"
     )
 
+# ========== Ensure Tables Exist ==========
+def setup_database():
+    conn = create_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            username VARCHAR(50) PRIMARY KEY
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS user_scores (
+            id SERIAL PRIMARY KEY,
+            username VARCHAR(50) REFERENCES users(username),
+            level INT,
+            score INT,
+            saved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    cur.close()
+    conn.close()
+
+# Call this before any other DB logic
+setup_database()
 def ensure_user(username):
     conn = create_connection()
     cur = conn.cursor()
