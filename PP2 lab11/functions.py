@@ -1,140 +1,114 @@
 import psycopg2
-import csv
+import unicodedata
 
-# ----------------------------
-# Database Connection
-# ----------------------------
-def create_connection():
-    return psycopg2.connect(
-        host="localhost",
-        database="lab10.2",
-        user="postgres",
-        password="12345678"
-    )
+# Set up database connection
+connection = psycopg2.connect(
+    host="localhost",
+    database="lab10.2",
+    user="postgres",
+    password="12345678"
+)
 
-# ----------------------------
-# Call search by pattern function
-# ----------------------------
-def call_search_pattern():
-    conn = create_connection()
-    cur = conn.cursor()
-    pattern = input("Enter pattern to search (name or phone): ")
-    cur.execute("SELECT * FROM search_phonebook(%s)", (pattern,))
-    rows = cur.fetchall()
-    print("\n📋 Matched Records:")
-    for row in rows:
-        print(f"ID: {row[0]} | Name: {row[1]} | Phone: {row[2]}")
-    cur.close()
-    conn.close()
+# Create a cursor object to interact with the database
+cursor = connection.cursor()
 
-# ----------------------------
-# Call insert or update single user
-# ----------------------------
-def call_insert_or_update():
-    conn = create_connection()
-    cur = conn.cursor()
-    name = input("Enter name: ")
-    phone = input("Enter phone number: ")
-    cur.execute("CALL insert_or_update_user(%s, %s)", (name, phone))
-    conn.commit()
-    print("✅ Inserted/Updated successfully!")
-    cur.close()
-    conn.close()
+# Function to sanitize input (remove non-ASCII characters)
+def sanitize_input(input_string):
+    # Normalize the input string and remove non-ASCII characters
+    return ''.join(c for c in unicodedata.normalize('NFKD', input_string) if unicodedata.category(c) != 'Mn')
 
-# ----------------------------
-# Insert many users via loop with validation
-# ----------------------------
-def call_insert_many():
-    conn = create_connection()
-    cur = conn.cursor()
-    n = int(input("How many users to insert? "))
-    names = []
-    phones = []
-    for _ in range(n):
-        names.append(input("Enter name: "))
-        phones.append(input("Enter phone: "))
+# 1. Call the `find_contacts_by_pattern` function
+def find_contacts(pattern):
+    cursor.execute("SELECT * FROM find_contacts_by_pattern(%s);", (pattern,))
+    results = cursor.fetchall()
+    return results
 
-    cur.execute("CALL insert_many_users(%s, %s)", (names, phones))
-    cur.execute("SELECT insert_many_users(%s, %s)", (names, phones))
-    invalid_data = cur.fetchone()[0]
-    if invalid_data:
-        print("❌ Invalid entries:", invalid_data)
-    else:
-        print("✅ All users inserted!")
-    conn.commit()
-    cur.close()
-    conn.close()
+# 2. Call the `add_or_update_contact` procedure
+def add_or_update_contact(name, phone):
+    cursor.execute("CALL add_or_update_contact(%s, %s);", (name, phone))
+    connection.commit()
 
-# ----------------------------
-# Pagination query
-# ----------------------------
-def call_paginated_query():
-    conn = create_connection()
-    cur = conn.cursor()
-    limit = int(input("Enter limit: "))
-    offset = int(input("Enter offset: "))
-    cur.execute("SELECT * FROM get_paginated_users(%s, %s)", (limit, offset))
-    rows = cur.fetchall()
-    print("\n📋 Paginated Results:")
-    for row in rows:
-        print(f"ID: {row[0]} | Name: {row[1]} | Phone: {row[2]}")
-    cur.close()
-    conn.close()
+# 3. Call the `bulk_insert_contacts` procedure
+def bulk_insert_contacts(users_list):
+    for user in users_list:
+        user_name, user_phone = user.split(",")  # Assuming the format 'name,phone'
+        cursor.execute("CALL add_or_update_contact(%s, %s);", (user_name, user_phone))
+    connection.commit()
 
-# ----------------------------
-# Call delete by name or phone
-# ----------------------------
-def call_delete():
-    conn = create_connection()
-    cur = conn.cursor()
-    print("Delete by:")
-    print("1. Name")
-    print("2. Phone")
-    choice = input("Your choice: ")
-    name = phone = None
-    if choice == "1":
-        name = input("Enter name to delete: ")
-    elif choice == "2":
-        phone = input("Enter phone to delete: ")
-    else:
-        print("❌ Invalid option")
-        return
-    cur.execute("CALL delete_user(%s, %s)", (name, phone))
-    conn.commit()
-    print("✅ Deleted successfully!")
-    cur.close()
-    conn.close()
+# 4. Call the `paginate_contacts_query` function
+def paginate_contacts(limit, offset):
+    cursor.execute("SELECT * FROM paginate_contacts_query(%s, %s);", (limit, offset))
+    results = cursor.fetchall()
+    return results
 
-# ----------------------------
-# Main Menu
-# ----------------------------
-def main():
+# 5. Call the `remove_contact_by_identifier` procedure
+def remove_contact(identifier):
+    cursor.execute("CALL remove_contact_by_identifier(%s);", (identifier,))
+    connection.commit()
+
+# Function to display the menu
+def show_menu():
+    print("\nChoose an option by number:")
+    print("1. Search contacts by pattern")
+    print("2. Add or update a contact")
+    print("3. Bulk insert contacts")
+    print("4. Paginate contacts")
+    print("5. Remove contact by username or phone")
+    print("6. Exit")
+
+# Function to handle user input for choosing options
+def user_input():
     while True:
-        print("\n=== PHONEBOOK MENU ===")
-        print("1. Search by pattern")
-        print("2. Insert or update user")
-        print("3. Insert many users")
-        print("4. Pagination query")
-        print("5. Delete user")
-        print("6. Exit")
+        show_menu()
+        choice = input("Enter your choice (1-6): ")
 
-        option = input("Choose option: ")
+        try:
+            if choice == "1":
+                pattern = input("Enter the pattern (name/phone to search): ")
+                pattern = sanitize_input(pattern)  # Sanitize input to remove any invalid characters
+                contacts = find_contacts(pattern)
+                for contact in contacts:
+                    print(contact)
 
-        if option == "1":
-            call_search_pattern()
-        elif option == "2":
-            call_insert_or_update()
-        elif option == "3":
-            call_insert_many()
-        elif option == "4":
-            call_paginated_query()
-        elif option == "5":
-            call_delete()
-        elif option == "6":
-            print("👋 Goodbye!")
-            break
-        else:
-            print("❌ Invalid input. Try again.")
+            elif choice == "2":
+                name = input("Enter the name of the contact: ")
+                name = sanitize_input(name)  # Sanitize input for name
+                phone = input("Enter the phone number: ")
+                phone = sanitize_input(phone)  # Sanitize input for phone
+                add_or_update_contact(name, phone)
+                print(f"Contact {name} has been added or updated.")
 
-if __name__ == "__main__":
-    main()
+            elif choice == "3":
+                users_input = input("Enter users in the format 'name,phone' separated by commas (e.g., John,1234567890): ")
+                users_list = users_input.split(",")  # This splits by commas, adjust if list of names/phones is needed
+                bulk_insert_contacts(users_list)
+                print("Bulk insert completed.")
+
+            elif choice == "4":
+                limit = int(input("Enter the number of contacts to fetch per page: "))
+                offset = int(input("Enter the offset (page number * limit): "))
+                contacts_page = paginate_contacts(limit, offset)
+                for contact in contacts_page:
+                    print(contact)
+
+            elif choice == "5":
+                identifier = input("Enter the username or phone number of the contact to remove: ")
+                identifier = sanitize_input(identifier)  # Sanitize identifier
+                remove_contact(identifier)
+                print(f"Contact with identifier {identifier} has been removed.")
+
+            elif choice == "6":
+                print("Exiting...")
+                break  # Exit the loop and close the program
+
+            else:
+                print("Invalid choice, please select a valid option (1-6).")
+        except Exception as e:
+            print(f"Error occurred: {e}")
+
+# Start the program
+user_input()
+
+# Close the cursor and connection when done
+cursor.close()
+connection.close()
